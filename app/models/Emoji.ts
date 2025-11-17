@@ -27,6 +27,10 @@ class Emoji extends Model {
   @observable
   createdById: string;
 
+  get searchContent(): string {
+    return this.name;
+  }
+
   /**
    * emoji name
    */
