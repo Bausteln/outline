@@ -79,6 +79,12 @@ class OIDCPluginEnvironment extends Environment {
     environment.OIDC_USERNAME_CLAIM ?? "preferred_username";
 
   /**
+   * The OIDC profile field to use for group synchronization. The default value is
+   * "groups". Set to an empty string to disable group synchronization.
+   */
+  public OIDC_GROUPS_CLAIM = environment.OIDC_GROUPS_CLAIM ?? "groups";
+
+  /**
    * A space separated list of OIDC scopes to request. Defaults to "openid
    * profile email".
    */
