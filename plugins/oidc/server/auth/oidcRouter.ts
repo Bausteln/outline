@@ -7,6 +7,7 @@ import { slugifyDomain } from "@shared/utils/domains";
 import { parseEmail } from "@shared/utils/email";
 import { isBase64Url } from "@shared/utils/urls";
 import accountProvisioner from "@server/commands/accountProvisioner";
+import groupSynchronizer from "@server/commands/groupSynchronizer";
 import {
   OIDCMalformedUserInfoError,
   AuthenticationError,
@@ -165,6 +166,30 @@ export function createOIDCRouter(
           const name = profile.name || username || profile.username;
           const profileId = profile.sub ?? token.sub ?? profile.id;
 
+          // Extract groups from the configured claim (defaults to 'groups')
+          // Groups can be in the profile or in the id_token
+          let groups: string[] = [];
+          if (env.OIDC_GROUPS_CLAIM) {
+            const groupsClaim =
+              get(profile, env.OIDC_GROUPS_CLAIM) ??
+              get(token, env.OIDC_GROUPS_CLAIM);
+            if (Array.isArray(groupsClaim)) {
+              groups = groupsClaim.filter(
+                (g): g is string => typeof g === "string"
+              );
+            } else if (typeof groupsClaim === "string") {
+              // Some providers return a comma-separated string
+              groups = groupsClaim.split(",").map((g) => g.trim());
+            }
+            Logger.debug(
+              "oidc",
+              `Extracted ${groups.length} groups from claims`,
+              {
+                groups,
+              }
+            );
+          }
+
           if (!name) {
             throw AuthenticationError(
               `Neither a ${env.OIDC_USERNAME_CLAIM}, "name" or "username" was returned in the profile loaded from ${endpoints.userInfoURL}, but at least one is required.`
@@ -219,6 +244,26 @@ export function createOIDCRouter(
               scopes: params.scope ? params.scope.split(" ") : scopes,
             },
           });
+
+          // Synchronize groups if groups were extracted from OIDC claims
+          if (groups.length > 0) {
+            try {
+              await groupSynchronizer(ctx, {
+                user: result.user,
+                team: result.team,
+                externalGroups: groups,
+                authProviderName: config.id,
+              });
+            } catch (err) {
+              // Log the error but don't fail authentication if group sync fails
+              Logger.error(
+                "oidc",
+                `Failed to synchronize groups for user ${result.user.id}`,
+                err
+              );
+            }
+          }
+
           return done(null, result.user, { ...result, client });
         } catch (err) {
           return done(err, null);
