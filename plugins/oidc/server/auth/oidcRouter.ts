@@ -249,7 +249,6 @@ export function createOIDCRouter(
             } catch (err) {
               // Log the error but don't fail authentication if group sync fails
               Logger.error(
-                "oidc",
                 `Failed to synchronize groups for user ${result.user.id}`,
                 err
               );
