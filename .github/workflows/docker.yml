@@ -14,10 +14,6 @@ env:
   BASE_IMAGE_NAME: ghcr.io/bausteln/outline-base
 
 jobs:
-  # Disabled ARM build for faster CI
-  # build-arm:
-  #   runs-on: ubuntu-latest
-
   build-amd:
     runs-on: ubuntu-latest
     steps:
