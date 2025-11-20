@@ -49,31 +49,67 @@ async function groupSynchronizer(
       // Use the group name as the externalId for OIDC groups
       const externalId = `${authProviderName}:${groupName}`;
 
-      const [group, created] = await Group.findOrCreate({
+      // First, try to find by externalId
+      let group = await Group.findOne({
         where: {
           teamId: team.id,
           externalId,
         },
-        defaults: {
-          name: groupName,
-          teamId: team.id,
-          externalId,
-          createdById: user.id,
-          description: `Automatically synchronized from ${authProviderName}`,
-        },
         transaction,
       });
 
-      if (created) {
-        result.created.push(group);
-        Logger.info(
-          "groupSynchronizer",
-          `Created new group "${groupName}" for team ${team.id}`,
-          {
-            groupId: group.id,
-            externalId,
-          }
-        );
+      // If not found by externalId, try to find by name (case-insensitive)
+      if (!group) {
+        group = await Group.findOne({
+          where: {
+            teamId: team.id,
+            name: sequelize.where(
+              sequelize.fn("LOWER", sequelize.col("name")),
+              sequelize.fn("LOWER", groupName)
+            ),
+          },
+          transaction,
+        });
+
+        // If found by name, update the externalId to claim this group
+        if (group) {
+          await group.update(
+            {
+              externalId,
+              description: `Automatically synchronized from ${authProviderName}`,
+            },
+            { transaction }
+          );
+          Logger.info(
+            "groupSynchronizer",
+            `Updated existing group "${groupName}" with externalId for team ${team.id}`,
+            {
+              groupId: group.id,
+              externalId,
+            }
+          );
+        } else {
+          // If not found at all, create a new group
+          group = await Group.create(
+            {
+              name: groupName,
+              teamId: team.id,
+              externalId,
+              createdById: user.id,
+              description: `Automatically synchronized from ${authProviderName}`,
+            },
+            { transaction }
+          );
+          result.created.push(group);
+          Logger.info(
+            "groupSynchronizer",
+            `Created new group "${groupName}" for team ${team.id}`,
+            {
+              groupId: group.id,
+              externalId,
+            }
+          );
+        }
       }
 
       return group;
